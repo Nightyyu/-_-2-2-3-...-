@@ -1,5 +1,5 @@
 from flask import Flask, jsonify, request
-import requests
+import cloudscraper
 from bs4 import BeautifulSoup
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta
@@ -7,7 +7,6 @@ import sqlite3
 import logging
 import os
 import re
-import time
 
 app = Flask(__name__)
 
@@ -90,7 +89,7 @@ def scrape_stock():
         'Cache-Control': 'max-age=0'
     }
     
-    # Opcional: Configurar proxies (descomente se necessário)
+    # Opcional: Configurar proxies (descomente e configure se necessário)
     # proxies = {
     #     'http': 'http://your_proxy:port',
     #     'https': 'https://your_proxy:port'
@@ -100,17 +99,12 @@ def scrape_stock():
     next_update_times = {}
 
     try:
-        # Configurar uma sessão para manter cookies
-        session = requests.Session()
-        session.headers.update(headers)
-        
-        # Opcional: Adicionar cookies específicos, se necessário
-        # cookies = {'cookie_name': 'cookie_value'}
-        # session.cookies.update(cookies)
+        # Criar instância do cloudscraper
+        scraper = cloudscraper.create_scraper()
         
         # Fazer a solicitação (com ou sem proxies)
-        response = session.get(url, timeout=10)  # Use proxies=proxies se configurar proxies
-        response.raise_for_status()  # Lança exceção para códigos de erro HTTP
+        response = scraper.get(url, headers=headers, timeout=10)  # Adicione proxies=proxies se necessário
+        response.raise_for_status()
         
         logger.info(f"Status da resposta: {response.status_code}")
         logger.info(f"Tamanho do HTML: {len(response.text)} caracteres")
@@ -166,11 +160,10 @@ def scrape_stock():
                     update_seconds = parse_update_time(time_str)
                     logger.info(f"Categoria {category}: próxima atualização em {update_seconds}s")
                 else:
-                    update_seconds = 300  # 5 minutos padrão
+                    update_seconds = 300
             else:
-                update_seconds = 300  # 5 minutos padrão
+                update_seconds = 300
             
-            # Mapear categoria para a chave correspondente
             if 'gear' in category:
                 category_key = 'gear'
             elif 'egg' in category:
@@ -201,7 +194,6 @@ def scrape_stock():
                 if not item_text:
                     continue
                 
-                # Extrair nome e quantidade
                 if ' x' in item_text:
                     parts = item_text.rsplit(' x', 1)
                     name = parts[0].strip()
@@ -217,7 +209,7 @@ def scrape_stock():
                     new_data[category_key].append({
                         'name': name,
                         'stock': stock,
-                        'price': 0  # Preço não está sendo extraído no momento
+                        'price': 0
                     })
                     items_found += 1
 
@@ -225,7 +217,6 @@ def scrape_stock():
 
         logger.info(f"Total de seções processadas: {sections_found}")
         
-        # Log do total de itens por categoria
         total_items = sum(len(items) for items in new_data.values())
         for category, items in new_data.items():
             logger.info(f"{category}: {len(items)} itens")
@@ -238,7 +229,6 @@ def scrape_stock():
 
         logger.info(f"Dados salvos no banco: {last_updated}")
         
-        # Reagendar baseado no menor tempo de atualização
         if next_update_times:
             min_seconds = min(next_update_times.values())
             min_category = min(next_update_times, key=next_update_times.get)
@@ -269,36 +259,8 @@ def scrape_stock():
                 id='stock_scraper'
             )
         
-    except requests.HTTPError as e:
-        if e.response.status_code == 403:
-            logger.error("Erro 403: Acesso negado. Possível bloqueio de bot ou autenticação necessária.")
-            # Tentar novamente com delay
-            try:
-                scheduler.remove_job('stock_scraper')
-            except:
-                pass
-            scheduler.add_job(
-                scrape_stock, 
-                'date', 
-                run_date=datetime.now() + timedelta(minutes=2),
-                id='stock_scraper'
-            )
-        else:
-            logger.error(f"Erro HTTP: {str(e)}")
-    except requests.RequestException as e:
-        logger.error(f"Erro na solicitação: {str(e)}")
-        try:
-            scheduler.remove_job('stock_scraper')
-        except:
-            pass
-        scheduler.add_job(
-            scrape_stock, 
-            'date', 
-            run_date=datetime.now() + timedelta(minutes=2),
-            id='stock_scraper'
-        )
     except Exception as e:
-        logger.error(f"Erro inesperado: {str(e)}")
+        logger.error(f"Erro ao raspar: {str(e)}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
         try:
