@@ -1,7 +1,7 @@
+from flask import Flask, jsonify, request
 import sqlite3
 import os
 import logging
-from flask import Flask, jsonify, request
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
@@ -16,12 +16,13 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Definir caminho do banco de dados para Render
-DB_PATH = os.path.join('/opt/render/project/src', 'stock_data.db')
+# Caminho do banco de dados para Render
+DB_PATH = os.path.join('/opt/render/project/src/data', 'stock_data.db')  # Use persistent disk
 
 def init_db():
     """Inicializa o banco de dados SQLite."""
     try:
+        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)  # Criar diretório se não existir
         with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.cursor()
             cursor.execute('''
@@ -35,7 +36,7 @@ def init_db():
                 )
             ''')
             conn.commit()
-            logger.info(f"Banco de dados inicializado com sucesso em {DB_PATH}")
+            logger.info(f"Banco de dados inicializado em {DB_PATH}")
     except sqlite3.Error as e:
         logger.error(f"Erro ao inicializar o banco de dados: {str(e)}")
         raise
@@ -62,10 +63,9 @@ def load_from_db(category=None):
     try:
         with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.cursor()
-            # Verificar se a tabela existe
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='stock'")
             if not cursor.fetchone():
-                logger.error("Tabela 'stock' não encontrada no banco de dados")
+                logger.error("Tabela 'stock' não encontrada")
                 return {'error': 'Tabela stock não encontrada'}, None
 
             if category:
@@ -84,9 +84,6 @@ def load_from_db(category=None):
     except sqlite3.Error as e:
         logger.error(f"Erro ao carregar dados do banco: {str(e)}")
         return {'error': f'Erro no banco de dados: {str(e)}'}, None
-
-# Restante do código (scrape_stock, endpoints, etc.) permanece como na versão anterior
-# Incluindo a função scrape_stock com undetected-chromedriver
 
 def parse_update_time(time_text):
     """Converte texto como '03m 56s' ou '01h 13m 56s' em segundos."""
@@ -111,20 +108,23 @@ def scrape_stock():
     logger.info(f"User-Agent: {user_agent}")
 
     chrome_options = Options()
-    chrome_options.add_argument('--headless')
+    chrome_options.add_argument('--headless=new')  # Novo modo headless para melhor compatibilidade
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument(f'--user-agent={user_agent}')
+    chrome_options.add_argument('--disable-gpu')  # Desativar GPU para Render
 
     try:
-        driver = uc.Chrome(options=chrome_options)
+        # Explicitamente definir o caminho do Chrome binary
+        chrome_options.binary_location = '/usr/bin/google-chrome'  # Caminho padrão no Render
+        driver = uc.Chrome(options=chrome_options, version_main=129)  # Especificar versão do Chrome
         driver.get(url)
         logger.info(f"Acessando URL: {url}")
         driver.implicitly_wait(10)
 
         if "checking your browser" in driver.page_source.lower():
             logger.warning("Cloudflare challenge detectado, aguardando...")
-            driver.implicitly_wait(10)
+            driver.implicitly_wait(15)
 
         soup = BeautifulSoup(driver.page_source, 'html.parser')
         driver.quit()
@@ -244,11 +244,9 @@ def scrape_stock():
         if 'driver' in locals():
             driver.quit()
 
-# Configuração do agendador
 scheduler = BackgroundScheduler()
 scheduler.start()
 
-# Inicializa o banco e faz o scraping inicial
 try:
     init_db()
     scrape_stock()
