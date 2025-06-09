@@ -271,17 +271,17 @@ def scrape_stock():
             else:
                 logger.error(f"Erro HTTP: {e}")
             continue
-        except requests.exceptions as e:
+        except requests.RequestException as e:
             logger.error(f"Erro ao raspar com proxy {proxies['http']}: {e}")
             continue
         except Exception as e:
             logger.error(f"Erro inesperado: {e}")
             import traceback
-            logger.error(f"Traceback: {traceback.format_exc())
+            logger.error(f"Traceback: {traceback.format_exc()}")
             continue
 
     else:
-         # After all retries, schedule a retry in 2 minutes
+        # After all retries, schedule a retry in 2 minutes
         logger.error(f"Falhou após {max_retries} tentativas. Reagendando em 2 minutos...")
         try:
             scheduler.remove_job('stock_scraper')
@@ -304,7 +304,7 @@ scrape_stock()
 
 @app.route('/')
 def home():
-    """Página inicial com métodos sobre a API."""
+    """Página inicial com informações sobre a API."""
     return jsonify({
         'message': 'API de Estoque Grow a Garden',
         'endpoints': {
@@ -328,9 +328,9 @@ def get_stock():
 
 @app.route('/api/grow-a-garden/stock/refresh', methods=['GET'])
 def refresh_stock():
-    """Força de uma atualização dos dados."""
+    """Força a atualização dos dados."""
     scrape_stock()
-    return jsonify({'message': {'Dados atualizados', 'last_updated': load_from_db()['last_updated']})
+    return jsonify({'message': 'Dados atualizados', 'last_updated': load_from_db()['last_updated']})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
