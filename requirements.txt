@@ -1,7 +1,4 @@
-Flask==3.0.3
-requests==2.32.3
-beautifulsoup4==4.12.3
-apscheduler==3.10.4
-fake-useragent==1.5.1
-undetected-chromedriver==3.5.5
-selenium==4.26.1
+flask==2.0.1
+cloudscraper==1.2.71
+beautifulsoup4==4.11.1
+apscheduler==3.10.1
